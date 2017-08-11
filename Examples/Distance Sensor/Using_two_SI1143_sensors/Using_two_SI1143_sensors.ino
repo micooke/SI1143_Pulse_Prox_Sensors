@@ -1,3 +1,6 @@
+// ##############################################################
+// ######## THIS EXAMPLE DOES NOT WORK WITH HARDWARE I2C ########
+// ##############################################################
 /* SI1143_proximity_demo.ino
  * http://moderndevice.com/product/si1143-proximity-sensors/
  * Reads the Proximity Sensor and either prints raw LED data or angular data 
@@ -50,7 +53,7 @@
 const int PORT_SI114_LEFT = 1;       // change to the JeeNode port number used, see the pin chart above
 const int PORT_SI114_RIGHT = 2;       // change to the JeeNode port number used, see the pin chart above
 
-#include "SI114.h"
+#include <Si114.h>
 
 const int samples = 4;            // samples for smoothing 1 to 10 seem useful
 
@@ -74,8 +77,8 @@ void setup () {
     }
     Serial.begin(9600);
 
-    SI114Right.initPulsePlug(SI114Left);
-    SI114Right.initPulsePlug(SI114Right);
+    SI114Right.init();
+    SI114Right.init();
 
 }
 
