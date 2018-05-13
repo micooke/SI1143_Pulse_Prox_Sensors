@@ -11,7 +11,6 @@
 // Paul Badger 2012 
 
 import processing.serial.*;
-import processing.serial.*;
 
 Serial myPort;            // The serial port
 int xPos = 1;             // horizontal position of the graph
