@@ -130,7 +130,7 @@ class PulsePlug {
    // increase for smoother waveform (with less resolution - slower!)
    void setSamplesToAverage(uint8_t& N_Samples) { samples_to_average = N_Samples; }
 
-   uint32_t readSensor(uint8_t sensorIdx = 1);   // sensorIdx = 1(HeartRate),2(Ambiant),3(Both)
+   void readSensor(uint8_t sensorIdx = 1);   // sensorIdx = 1(HeartRate),2(Ambiant),3(Both)
    uint32_t readPulseSensor();
    uint32_t readAmbientSensor();
 
