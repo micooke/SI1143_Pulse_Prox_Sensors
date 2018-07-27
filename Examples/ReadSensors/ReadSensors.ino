@@ -1,6 +1,7 @@
 #include <Si114.h>
 
-PulsePlug pulse;
+PulsePlug<> pulse(Wire);
+//PulsePlug<TwoWire> acc(Wire); // TwoWire is the default class, so this is the same as above
 
 void setup()
 {

@@ -39,14 +39,6 @@
 #define debugPrintln(...)
 #endif
 
-/* Toby Notes:
-  In the original library, pins were as follows:
-  digiPin() = SDA
-  digiPin2() = SCL
-  digiPin3() = unused, but assigned to 3 in most cases
-  anaPin() = 0 or -1 (???)
-  */
-
 /*
 // simple smoothing function for heartbeat detection and processing
 static float smooth(float data, float filterVal, float smoothedVal)
@@ -74,8 +66,11 @@ uint32_t smooth(uint32_t data, uint8_t filterVal, uint32_t smoothedVal)
    return returnVal;
 }
 
+template <class T = TwoWire>
 class PulsePlug {
    private:
+   T * _i2c;
+   bool i2cStarted;
    uint8_t i2cAddr;
    uint8_t samples_to_average;
 
@@ -105,18 +100,15 @@ class PulsePlug {
    uint16_t led_red, led_ir1, led_ir2;
    uint16_t als_ir, als_vis;
 
-   PulsePlug()
-      : i2cAddr(0x5A), samples_to_average(5), measurementCount(0), valley(0), peak(0), smoothPeak(0), smoothValley(0),
+   PulsePlug(T &i2c_reference)
+      : i2cAddr(0x5A), i2cStarted(false), samples_to_average(5), measurementCount(0), valley(0), peak(0), smoothPeak(0), smoothValley(0),
         lastTotal(0), lastBeat(0), lastValleyTime(0), lastPeakTime(0), baseline(0), IR_baseline(0), red_baseline(0),
         hysterisis(0), LFoutput(0), HFoutput(0), lastBinOut(false), cumulativeTotal(0), signalSize(0)
-   {
-      Wire.begin();
-   }
+   { _i2c = &i2c_reference; }
    ~PulsePlug() { Wire.end(); }
 
    // Note, can also take a 3rd parameter; set false to say don't release the bus
    void requestData(uint8_t count) const { Wire.requestFrom(i2cAddr, count); }
-
    bool isPresent();
    void init();
    void setAddress(uint8_t _i2cAddr = 0x5A) { i2cAddr = _i2cAddr; }
@@ -138,10 +130,18 @@ class PulsePlug {
    uint8_t getPSO2(bool usePrevReading = true);
 };
 
-bool PulsePlug::isPresent()
+template <class T>
+bool PulsePlug<T>::isPresent()
 {
+   if (i2cStarted == false)
+   {
+      _i2c->begin();
+      i2cStarted = true;  
+   }
+
    beginTransmission();
    uint8_t result = endTransmission();
+   
    if (result == 0)
    {
       return true;
@@ -154,7 +154,8 @@ bool PulsePlug::isPresent()
    }
 }
 
-uint8_t PulsePlug::readParam(uint8_t addr)
+template <class T>
+uint8_t PulsePlug<T>::readParam(uint8_t addr)
 {
    // read from parameter ram
    beginTransmission();
@@ -165,7 +166,8 @@ uint8_t PulsePlug::readParam(uint8_t addr)
    return getReg(Si114x::PARAM_RD);
 }
 
-uint8_t PulsePlug::getReg(uint8_t reg)
+template <class T>
+uint8_t PulsePlug<T>::getReg(uint8_t reg)
 {
    // get a register
    beginTransmission();
@@ -177,7 +179,8 @@ uint8_t PulsePlug::getReg(uint8_t reg)
    return result;
 }
 
-void PulsePlug::setReg(uint8_t reg, uint8_t val)
+template <class T>
+void PulsePlug<T>::setReg(uint8_t reg, uint8_t val)
 {
    // set a register
    beginTransmission();
@@ -187,19 +190,27 @@ void PulsePlug::setReg(uint8_t reg, uint8_t val)
    delay(10);   // NOTE: Nothing in datasheet indicates this is required - in original code.
 }
 
-void PulsePlug::id()
+template <class T>
+void PulsePlug<T>::id()
 {
    Serial.print("PART: ");
-   Serial.print(PulsePlug::getReg(Si114x::PART_ID));
+   Serial.print(getReg(Si114x::PART_ID));
    Serial.print(" REV: ");
-   Serial.print(PulsePlug::getReg(Si114x::REV_ID));
+   Serial.print(getReg(Si114x::REV_ID));
    Serial.print(" SEQ: ");
-   Serial.println(PulsePlug::getReg(Si114x::SEQ_ID));
+   Serial.println(getReg(Si114x::SEQ_ID));
 }
 
-void PulsePlug::init()
+template <class T>
+void PulsePlug<T>::init()
 {
-   PulsePlug::setReg(Si114x::HW_KEY, 0x17);
+   if (i2cStarted == false)
+   {
+      _i2c->begin();
+      i2cStarted = true;  
+   }
+
+   setReg(Si114x::HW_KEY, 0x17);
    // pulsePlug.setReg(Si114x::COMMAND, Si114x::RESET_cmd);
    //
    setReg(Si114x::INT_CFG, 0x03);      // turn on interrupts
@@ -248,7 +259,8 @@ void PulsePlug::init()
    setReg(Si114x::COMMAND, Si114x::PSALS_AUTO_cmd);       // starts an autonomous read loop
 }
 
-void PulsePlug::setLEDcurrents(uint8_t _LED1, uint8_t _LED2, uint8_t _LED3)
+template <class T>
+void PulsePlug<T>::setLEDcurrents(uint8_t _LED1, uint8_t _LED2, uint8_t _LED3)
 {
    /*
    VLEDn = 1 V, PS_LEDn = 0001    5.6
@@ -272,11 +284,12 @@ void PulsePlug::setLEDcurrents(uint8_t _LED1, uint8_t _LED2, uint8_t _LED3)
    _LED2 = constrain(_LED2, 0, 15);
    _LED3 = constrain(_LED3, 0, 15);
 
-   PulsePlug::setReg(Si114x::PS_LED21, (_LED2 << 4) | _LED1);
-   PulsePlug::setReg(Si114x::PS_LED3, _LED3);
+   setReg(Si114x::PS_LED21, (_LED2 << 4) | _LED1);
+   setReg(Si114x::PS_LED3, _LED3);
 }
 
-void PulsePlug::setLEDdrive(uint8_t LED1pulse, uint8_t LED2pulse, uint8_t LED3pulse)
+template <class T>
+void PulsePlug<T>::setLEDdrive(uint8_t LED1pulse, uint8_t LED2pulse, uint8_t LED3pulse)
 {
    // this sets which LEDs are active on which pulses
    // any or none of the LEDs may be active on each PulsePlug
@@ -287,28 +300,29 @@ void PulsePlug::setLEDdrive(uint8_t LED1pulse, uint8_t LED2pulse, uint8_t LED3pu
    // example setLEDdrive(1, 2, 5); sets LED1 on pulse 1, LED2 on pulse 2, LED3,
    // LED1 on pulse 3
 
-   PulsePlug::writeParam(
+   writeParam(
       Si114x::PARAM_PSLED12_SELECT,
       (LED1pulse << 4) | LED2pulse);   // select LEDs on for readings see datasheet
-   PulsePlug::writeParam(Si114x::PARAM_PSLED3_SELECT, LED3pulse);
+   writeParam(Si114x::PARAM_PSLED3_SELECT, LED3pulse);
 }
 
 // Returns ambient light values as an array
 // First item is visual light, second is IR light.
-uint16_t* PulsePlug::fetchALSData()
+template <class T>
+uint16_t* PulsePlug<T>::fetchALSData()
 {
    static uint16_t als_data[2];
    static uint16_t tmp;
    // read out all result registers as lsb-msb pairs of bytes
    beginTransmission();
-   Wire.write(Si114x::ALS_VIS_DATA0);
+   _i2c->write(Si114x::ALS_VIS_DATA0);
    endTransmission();
    requestData(4);
 
    for (uint8_t i = 0; i <= 1; ++i)
    {
-      als_data[i] = Wire.read();
-      tmp         = Wire.read();
+      als_data[i] = _i2c->read();
+      tmp         = _i2c->read();
 
       als_data[i] += (tmp << 8);
    }
@@ -319,20 +333,21 @@ uint16_t* PulsePlug::fetchALSData()
 // Fetch data from the PS1, PS2 and PS3 registers.
 // They are stored as LSB-MSB pairs of bytes there; convert them to 16bit ints
 // here.
-uint16_t* PulsePlug::fetchLedData()
+template <class T>
+uint16_t* PulsePlug<T>::fetchLedData()
 {
    static uint16_t ps[3];
    static uint16_t tmp;
 
    beginTransmission();
-   Wire.write(Si114x::PS1_DATA0);
+   _i2c->write(Si114x::PS1_DATA0);
    endTransmission();
    requestData(6);
 
    for (uint8_t i = 0; i <= 2; ++i)
    {
-      ps[i] = Wire.read();
-      tmp   = Wire.read();
+      ps[i] = _i2c->read();
+      tmp   = _i2c->read();
 
       ps[i] += (tmp << 8);
    }
@@ -340,20 +355,22 @@ uint16_t* PulsePlug::fetchLedData()
    return ps;
 }
 
-void PulsePlug::writeParam(uint8_t addr, uint8_t val)
+template <class T>
+void PulsePlug<T>::writeParam(uint8_t addr, uint8_t val)
 {
    // write to parameter ram
    beginTransmission();
-   Wire.write(Si114x::PARAM_WR);
-   Wire.write(val);
+   _i2c->write(Si114x::PARAM_WR);
+   _i2c->write(val);
    // auto-increments into Si114x::COMMAND
-   Wire.write(0xA0 | addr);   // PARAM_SET
+   _i2c->write(0xA0 | addr);   // PARAM_SET
    endTransmission();
    delay(10);   // XXX Nothing in datasheet indicates this is required; was in
                 // original code.
 }
 
-void PulsePlug::readSensor(uint8_t sensorIdx)
+template <class T>
+void PulsePlug<T>::readSensor(uint8_t sensorIdx)
 {
    uint32_t _sensor[5] = {0, 0, 0, 0, 0};
    uint8_t count       = 0;
@@ -396,19 +413,22 @@ void PulsePlug::readSensor(uint8_t sensorIdx)
    }
 }
 
-uint32_t PulsePlug::readPulseSensor()
+template <class T>
+uint32_t PulsePlug<T>::readPulseSensor()
 {
    readSensor(1);
    return led_red + led_ir1 + led_ir2;
 }
 
-uint32_t PulsePlug::readAmbientSensor()
+template <class T>
+uint32_t PulsePlug<T>::readAmbientSensor()
 {
    readSensor(2);
    return als_vis + als_ir;
 }
 
-uint8_t PulsePlug::getHeartRate(bool insertNewlineAtEnd)
+template <class T>
+uint8_t PulsePlug<T>::getHeartRate(bool insertNewlineAtEnd)
 {
    uint32_t tNow = millis();
    bool binOut;   // 1 or 0 depending on state of heartbeat
@@ -510,7 +530,8 @@ uint8_t PulsePlug::getHeartRate(bool insertNewlineAtEnd)
    return static_cast<uint8_t>(BPM);
 }
 
-uint8_t PulsePlug::getPSO2(bool usePrevReading)
+template <class T>
+uint8_t PulsePlug<T>::getPSO2(bool usePrevReading)
 {
    uint32_t total;
    bool binOut;   // 1 or 0 depending on state of heartbeat
