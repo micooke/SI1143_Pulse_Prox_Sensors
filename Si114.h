@@ -89,10 +89,6 @@ class PulsePlug {
    uint8_t getReg(uint8_t reg);
    void setReg(uint8_t reg, uint8_t val);
 
-   void beginTransmission() const { Wire.beginTransmission(i2cAddr); }
-   // Note, could optionally take a boolean(false) to say don't release the bus
-   uint8_t endTransmission() const { return Wire.endTransmission(); }
-
    uint8_t readParam(uint8_t addr);
    void writeParam(uint8_t addr, uint8_t val);
 
@@ -105,10 +101,10 @@ class PulsePlug {
         lastTotal(0), lastBeat(0), lastValleyTime(0), lastPeakTime(0), baseline(0), IR_baseline(0), red_baseline(0),
         hysterisis(0), LFoutput(0), HFoutput(0), lastBinOut(false), cumulativeTotal(0), signalSize(0)
    { _i2c = &i2c_reference; }
-   ~PulsePlug() { Wire.end(); }
+   ~PulsePlug() { _i2c->end(); }
 
    // Note, can also take a 3rd parameter; set false to say don't release the bus
-   void requestData(uint8_t count) const { Wire.requestFrom(i2cAddr, count); }
+   void requestData(uint8_t count) const { _i2c->requestFrom(i2cAddr, count); }
    bool isPresent();
    void init();
    void setAddress(uint8_t _i2cAddr = 0x5A) { i2cAddr = _i2cAddr; }
@@ -135,12 +131,17 @@ bool PulsePlug<T>::isPresent()
 {
    if (i2cStarted == false)
    {
+     #if defined (_VARIANT_T28_)
+     // Turn on the hr sensor (driven by a P-mosfet, so drive LOW to turn on)
+     pinMode(PIN_HR_ON, OUTPUT);
+     digitalWrite(PIN_HR_ON, LOW);
+     #endif
       _i2c->begin();
-      i2cStarted = true;  
+      i2cStarted = true; 
    }
 
-   beginTransmission();
-   uint8_t result = endTransmission();
+   _i2c->beginTransmission(i2cAddr);
+   uint8_t result = _i2c->endTransmission();
    
    if (result == 0)
    {
@@ -148,6 +149,8 @@ bool PulsePlug<T>::isPresent()
    }
    else
    {
+      // 2 - NACK received after sending the address
+      // 3 - NACK received after sending a data byte
       debugPrint("isPresent() error code = ");
       debugPrintln(result);
       return false;
@@ -158,10 +161,10 @@ template <class T>
 uint8_t PulsePlug<T>::readParam(uint8_t addr)
 {
    // read from parameter ram
-   beginTransmission();
-   Wire.write(Si114x::COMMAND);
-   Wire.write(0x80 | addr);   // PARAM_QUERY
-   endTransmission();
+   _i2c->beginTransmission(i2cAddr);
+   _i2c->write(Si114x::COMMAND);
+   _i2c->write(0x80 | addr);   // PARAM_QUERY
+   _i2c->endTransmission();
    delay(10);   // NOTE: Nothing in datasheet indicates this is required - in original code.
    return getReg(Si114x::PARAM_RD);
 }
@@ -170,11 +173,11 @@ template <class T>
 uint8_t PulsePlug<T>::getReg(uint8_t reg)
 {
    // get a register
-   beginTransmission();
-   Wire.write(reg);
-   endTransmission();
+   _i2c->beginTransmission(i2cAddr);
+   _i2c->write(reg);
+   _i2c->endTransmission();
    requestData(1);
-   uint8_t result = Wire.read();
+   uint8_t result = _i2c->read();
    delay(10);   // NOTE: Nothing in datasheet indicates this is required - in original code.
    return result;
 }
@@ -183,10 +186,10 @@ template <class T>
 void PulsePlug<T>::setReg(uint8_t reg, uint8_t val)
 {
    // set a register
-   beginTransmission();
-   Wire.write(reg);
-   Wire.write(val);
-   endTransmission();
+   _i2c->beginTransmission(i2cAddr);
+   _i2c->write(reg);
+   _i2c->write(val);
+   _i2c->endTransmission();
    delay(10);   // NOTE: Nothing in datasheet indicates this is required - in original code.
 }
 
@@ -206,6 +209,11 @@ void PulsePlug<T>::init()
 {
    if (i2cStarted == false)
    {
+      #if defined (_VARIANT_T28_)
+      // Turn on the hr sensor (driven by a P-mosfet, so drive LOW to turn on)
+      pinMode(PIN_HR_ON, OUTPUT);
+      digitalWrite(PIN_HR_ON, LOW);
+      #endif
       _i2c->begin();
       i2cStarted = true;  
    }
@@ -314,9 +322,9 @@ uint16_t* PulsePlug<T>::fetchALSData()
    static uint16_t als_data[2];
    static uint16_t tmp;
    // read out all result registers as lsb-msb pairs of bytes
-   beginTransmission();
+   _i2c->beginTransmission(i2cAddr);
    _i2c->write(Si114x::ALS_VIS_DATA0);
-   endTransmission();
+   _i2c->endTransmission();
    requestData(4);
 
    for (uint8_t i = 0; i <= 1; ++i)
@@ -339,9 +347,9 @@ uint16_t* PulsePlug<T>::fetchLedData()
    static uint16_t ps[3];
    static uint16_t tmp;
 
-   beginTransmission();
+   _i2c->beginTransmission(i2cAddr);
    _i2c->write(Si114x::PS1_DATA0);
-   endTransmission();
+   _i2c->endTransmission();
    requestData(6);
 
    for (uint8_t i = 0; i <= 2; ++i)
@@ -359,12 +367,12 @@ template <class T>
 void PulsePlug<T>::writeParam(uint8_t addr, uint8_t val)
 {
    // write to parameter ram
-   beginTransmission();
+   _i2c->beginTransmission(i2cAddr);
    _i2c->write(Si114x::PARAM_WR);
    _i2c->write(val);
    // auto-increments into Si114x::COMMAND
    _i2c->write(0xA0 | addr);   // PARAM_SET
-   endTransmission();
+   _i2c->endTransmission();
    delay(10);   // XXX Nothing in datasheet indicates this is required; was in
                 // original code.
 }

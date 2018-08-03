@@ -1,7 +1,14 @@
 #include <Si114.h>
 
+//#define USE_SOFTWAREI2C
+#ifdef USE_SOFTWAREI2C 
+#include <SoftwareI2C.h>
+SoftwareI2C sWire(14, 16);
+PulsePlug<SoftwareI2C> pulse(sWire);
+#else
 PulsePlug<> pulse(Wire);
-//PulsePlug<TwoWire> acc(Wire); // TwoWire is the default class, so this is the same as above
+//PulsePlug<TwoWire> pulse(Wire); // TwoWire is the default class, so this is the same as above
+#endif
 
 void setup()
 {
