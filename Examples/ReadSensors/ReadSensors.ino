@@ -1,9 +1,19 @@
 #include <Si114.h>
 
+#ifdef _VARIANT_ID107HR_
+  #ifdef ACCEL_HWI2C
+  #define USE_SOFTWAREI2C
+  #endif
+#else
+  #define USE_SOFTWAREI2C
+  #define PIN_WIRE1_SDA 22
+  #define PIN_WIRE1_SCL 23
+#endif
+
 //#define USE_SOFTWAREI2C
-#ifdef USE_SOFTWAREI2C 
+#ifdef USE_SOFTWAREI2C
 #include <SoftwareI2C.h>
-SoftwareI2C sWire(14, 16);
+SoftwareI2C sWire(PIN_WIRE1_SDA, PIN_WIRE1_SCL);
 PulsePlug<SoftwareI2C> pulse(sWire);
 #else
 PulsePlug<> pulse(Wire);
